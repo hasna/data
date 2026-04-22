@@ -1,0 +1,84 @@
+{
+  "name": "@hasna/data",
+  "version": "0.1.0",
+  "description": "Structured data indexing with local knowledge graphs - CLI + MCP server + library API",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "data": "dist/cli/index.js",
+    "data-mcp": "dist/mcp/index.js",
+    "data-serve": "dist/server/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./sdk": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun build src/cli/index.tsx --outdir dist/cli --target bun --external ink --external react --external chalk --external @modelcontextprotocol/sdk && bun build src/mcp/index.ts --outdir dist/mcp --target bun --external @modelcontextprotocol/sdk && bun build src/server/index.ts --outdir dist/server --target bun && bun build src/index.ts --outdir dist --target bun && bun build src/sdk/index.ts --outdir dist/sdk --target bun",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "dev:cli": "bun run src/cli/index.tsx",
+    "dev:mcp": "bun run src/mcp/index.ts",
+    "dev:serve": "bun run src/server/index.ts",
+    "prepublishOnly": "bun run build",
+    "postinstall": "mkdir -p $HOME/.hasna/data $HOME/.hasna/data/tenants $HOME/.hasna/data/uploads 2>/dev/null || true"
+  },
+  "keywords": [
+    "data",
+    "knowledge-graph",
+    "neo4j",
+    "vectors",
+    "embeddings",
+    "openai",
+    "mcp",
+    "cli",
+    "typescript",
+    "bun"
+  ],
+  "author": "Hasna",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@hasna/cloud": "^0.1.24",
+    "@hasna/connectors-sdk": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "ink": "^5.2.0",
+    "neo4j-driver": "^5.27.0",
+    "openai": "^4.0.0",
+    "react": "^18.3.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.4",
+    "@types/react": "^18.3.18",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hasna/data.git"
+  },
+  "homepage": "https://github.com/hasna/data",
+  "bugs": {
+    "url": "https://github.com/hasna/data/issues"
+  }
+}
