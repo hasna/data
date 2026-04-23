@@ -32,6 +32,7 @@ import {
 import {
   ingestData,
   processPendingRecord,
+  batchIngestData,
 } from "../services/indexing.js";
 import {
   structureData,
@@ -125,6 +126,11 @@ export class OpenData {
   async processRecord(recordId: string) {
     ensureInit();
     return processPendingRecord(recordId);
+  }
+
+  async batchIngest(input: Parameters<typeof batchIngestData>[0]) {
+    ensureInit();
+    return batchIngestData(input);
   }
 
   async search(input: Parameters<typeof search>[0]) {

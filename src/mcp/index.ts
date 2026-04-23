@@ -27,6 +27,7 @@ import {
   countRecordsByStatus,
   ingestData,
   processPendingRecord,
+  batchIngestData,
   vectorSearch,
   graphSearch,
   hybridSearch,
@@ -255,7 +256,7 @@ server.tool("ingest_data", "Ingest data into a dataset (runs full pipeline if au
   tenant_id: z.string().describe("Tenant ID"),
   dataset_id: z.string().describe("Dataset ID"),
   data: z.any().describe("Data to ingest (any JSON)"),
-  source: z.enum(["file", "session", "api", "manual"]).optional().describe("Source type"),
+  source: z.enum(["file", "session", "api", "mcp", "manual"]).optional().describe("Source type"),
   auto_process: z.boolean().optional().describe("Auto-run full pipeline (default true)"),
 }, async (params) => {
   const result = await ingestData({
@@ -273,6 +274,29 @@ server.tool("process_record", "Process a pending record through the full pipelin
 }, async (params) => {
   const result = await processPendingRecord(params.record_id);
   return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+});
+
+server.tool("batch_ingest_data", "Ingest multiple records into a dataset at once", {
+  tenant_id: z.string().describe("Tenant ID"),
+  dataset_id: z.string().describe("Dataset ID"),
+  records: z.array(z.any()).describe("Array of records to ingest (any JSON)"),
+  source: z.enum(["file", "session", "api", "mcp", "manual"]).optional().describe("Source type"),
+  auto_process: z.boolean().optional().describe("Auto-run full pipeline (default true)"),
+  concurrency: z.number().optional().describe("Max concurrent records (default 5)"),
+}, async (params) => {
+  try {
+    const result = await batchIngestData({
+      tenant_id: params.tenant_id,
+      dataset_id: params.dataset_id,
+      source: params.source ?? "api",
+      records: params.records,
+      auto_process: params.auto_process ?? true,
+      concurrency: params.concurrency ?? 5,
+    });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  } catch (err: any) {
+    return { content: [{ type: "text", text: JSON.stringify({ total: 0, results: [{ status: "error", record_id: "", message: err.message ?? "Batch ingest failed" }] }, null, 2) }] };
+  }
 });
 
 // --- Search tools ---

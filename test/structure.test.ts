@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterAll } from "bun:test";
 import type { DatasetSchema } from "../src/types.js";
 
 // Mock OpenAI module — must be registered before importing the module under test
@@ -465,5 +465,47 @@ describe("sanitizeData", () => {
         remove_pii: false,
       })
     ).rejects.toThrow();
+  });
+});
+
+// --- API key guard (unmocked) ---
+
+describe("structureData API key guard", () => {
+  const savedKey = process.env.OPENAI_API_KEY;
+
+  afterAll(() => {
+    if (savedKey) {
+      process.env.OPENAI_API_KEY = savedKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
+  });
+
+  test("structureData throws when OpenAI API key is not configured", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    // Force re-import of config by clearing module cache
+    const { structureData } = await import("../src/services/structure.js");
+
+    await expect(
+      structureData({
+        raw_data: { text: "test" },
+        dataset_schema: sampleSchema,
+      })
+    ).rejects.toThrow("OpenAI API key not configured");
+  });
+
+  test("sanitizeData throws when OpenAI API key is not configured", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const { sanitizeData } = await import("../src/services/structure.js");
+
+    await expect(
+      sanitizeData({
+        data: { name: "test" },
+        dataset_schema: sampleSchema,
+        remove_pii: false,
+      })
+    ).rejects.toThrow("OpenAI API key not configured");
   });
 });

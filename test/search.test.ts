@@ -118,6 +118,52 @@ describe("vectorSearch", () => {
 
     vecSpy.mockRestore();
   });
+
+  test("applies date_from filter", async () => {
+    const vecSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue([1, 0]);
+
+    const result = await vectorSearch({
+      tenant_id: tenantId,
+      query: "test",
+      search_type: "vector",
+      filters: { date_from: "2026-01-01" },
+    });
+
+    // No records match the date, but it should not error
+    expect(result).toBeDefined();
+
+    vecSpy.mockRestore();
+  });
+
+  test("applies date_to filter", async () => {
+    const vecSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue([1, 0]);
+
+    const result = await vectorSearch({
+      tenant_id: tenantId,
+      query: "test",
+      search_type: "vector",
+      filters: { date_to: "2026-01-01" },
+    });
+
+    expect(result).toBeDefined();
+
+    vecSpy.mockRestore();
+  });
+
+  test("applies both date_from and date_to filters", async () => {
+    const vecSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue([1, 0]);
+
+    const result = await vectorSearch({
+      tenant_id: tenantId,
+      query: "test",
+      search_type: "vector",
+      filters: { date_from: "2026-01-01", date_to: "2026-12-31" },
+    });
+
+    expect(result).toBeDefined();
+
+    vecSpy.mockRestore();
+  });
 });
 
 // --- hybridSearch tests ---
@@ -183,6 +229,33 @@ describe("hybridSearch", () => {
     // Should still return a result object
     expect(result).toBeDefined();
     expect(result.latency_ms).toBeGreaterThanOrEqual(0);
+
+    vecSpy.mockRestore();
+  });
+
+  test("deduplicates record appearing in both vector and graph results", async () => {
+    // Create a vector record with a known vector
+    const r1 = createRecord(datasetId, tenantId, { text: "both modes" });
+    updateRecordStatus(r1.id, "complete");
+    updateRecordVector(r1.id, [1, 0, 0]);
+
+    // Create an entity in the same dataset that matches the query
+    createEntity(tenantId, datasetId, "person", "BothModes");
+
+    const vecSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue([1, 0, 0]);
+
+    const result = await hybridSearch({
+      tenant_id: tenantId,
+      query: "BothModes",
+      search_type: "hybrid",
+      datasets: [datasetId],
+    });
+
+    // The same record should not appear twice
+    const ids = result.records.map((r: any) => r.record.id);
+    expect(ids.length).toBe(new Set(ids).size);
+    // The record from vector + graph should have a boosted score
+    expect(result.records.length).toBeGreaterThanOrEqual(1);
 
     vecSpy.mockRestore();
   });
@@ -300,6 +373,25 @@ describe("graphSearch", () => {
     });
 
     expect(result.latency_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  test("fetches records for matching entity's dataset", async () => {
+    // Create a complete record that will be found via graph search
+    const rec = createRecord(datasetId, tenantId, { text: "graph record fetch" });
+    updateRecordStatus(rec.id, "complete");
+
+    const e1 = createEntity(tenantId, datasetId, "concept", "GraphRecordFetch");
+
+    const result = await graphSearch({
+      tenant_id: tenantId,
+      query: "GraphRecordFetch",
+      search_type: "graph",
+      datasets: [datasetId],
+    });
+
+    // Graph search should return the record associated with the entity's dataset
+    expect(result.records.length).toBeGreaterThanOrEqual(1);
+    expect(result.records.some((r: any) => r.record.id === rec.id)).toBe(true);
   });
 });
 

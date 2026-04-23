@@ -1,5 +1,39 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { cosineSimilarity, textToSearchable } from "../src/services/vectorize.js";
+
+// Mock OpenAI module for vectorizeSingle tests
+const mockCreate = mock(() =>
+  Promise.resolve({
+    data: [{ embedding: [0.1, 0.2, 0.3] }],
+    usage: { total_tokens: 10 },
+  })
+);
+
+mock.module("openai", () => ({
+  default: class MockOpenAI {
+    constructor() {}
+    chat = { completions: { create: mock() } };
+    embeddings = { create: mockCreate };
+  },
+}));
+
+import { vectorizeSingle } from "../src/services/vectorize.js";
+
+describe("vectorizeSingle", () => {
+  beforeEach(() => {
+    mockCreate.mockClear();
+  });
+
+  test("returns embedding array for single text", async () => {
+    const result = await vectorizeSingle("hello world");
+    expect(result).toEqual([0.1, 0.2, 0.3]);
+  });
+
+  test("passes custom model to vectorizeTexts", async () => {
+    await vectorizeSingle("test text", "custom-model");
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("cosineSimilarity", () => {
   test("returns 1 for identical vectors", () => {

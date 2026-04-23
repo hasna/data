@@ -681,6 +681,54 @@ describe("REST API — CORS", () => {
   });
 });
 
+describe("REST API — batch ingest", () => {
+  test("POST /api/ingest/batch creates multiple pending records", async () => {
+    const res = await post("/api/ingest/batch", {
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "api-test",
+      records: [{ text: "batch1" }, { text: "batch2" }],
+      auto_process: false,
+    });
+    expect(res.status).toBe(201);
+    const result = await res.json();
+    expect(result.total).toBe(2);
+    expect(result.results.length).toBe(2);
+    expect(result.results.every((r: any) => r.status === "pending")).toBe(true);
+  });
+
+  test("POST /api/ingest/batch validates required fields", async () => {
+    const res = await post("/api/ingest/batch", { records: [{ x: 1 }] });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("required");
+  });
+
+  test("POST /api/ingest/batch rejects non-array records", async () => {
+    const res = await post("/api/ingest/batch", {
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      records: "not an array",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("POST /api/ingest/batch processes records with auto_process=true", async () => {
+    // Without mocked pipeline, records will still complete or fail gracefully
+    const res = await post("/api/ingest/batch", {
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      records: [{ batch: "sdk" }],
+      auto_process: true,
+      concurrency: 1,
+    });
+    expect(res.status).toBe(201);
+    const result = await res.json();
+    expect(result.total).toBe(1);
+    expect(result).toHaveProperty("results");
+  });
+});
+
 describe("REST API — 404", () => {
   test("returns 404 for unknown routes", async () => {
     const res = await get("/api/unknown");

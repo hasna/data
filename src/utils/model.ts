@@ -16,11 +16,6 @@ const PROVIDER_EMBEDDING_MODELS: Record<string, string> = {
   "api.moonshot.cn": "moonshot-v1-embedding",
 };
 
-function isProviderUrl(providerHost: string): boolean {
-  const config = getConfig();
-  return !!config.openai_base_url && config.openai_base_url.includes(providerHost);
-}
-
 function isOpenAIModel(model: string, prefixes: string[]): boolean {
   return prefixes.some((p) => model.startsWith(p));
 }

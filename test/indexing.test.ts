@@ -1,14 +1,15 @@
 import { describe, test, expect, beforeAll, afterAll, mock, spyOn } from "bun:test";
 import { initDb, closeDb } from "../src/db/sqlite.js";
 import { createTenant } from "../src/services/tenant.js";
-import { createDataset } from "../src/services/dataset.js";
+import { createDataset, updateDataset, deleteDataset } from "../src/services/dataset.js";
 import { getRecord, updateRecordStatus, updateRecordVector } from "../src/services/record.js";
 import { createEntity, getEntity, listEntities } from "../src/services/graph.js";
-import { ingestData, processPendingRecord } from "../src/services/indexing.js";
+import { ingestData, processPendingRecord, batchIngestData } from "../src/services/indexing.js";
 
 import * as structureMod from "../src/services/structure.js";
 import * as vectorizeMod from "../src/services/vectorize.js";
 import * as graphMod from "../src/services/graph.js";
+import * as neo4jMod from "../src/db/neo4j.js";
 
 const DB_PATH = `/tmp/open-data-test-indexing-${Date.now()}.db`;
 let tenantId: string;
@@ -327,6 +328,128 @@ describe("ingestData — auto_process with mocked pipeline", () => {
   });
 });
 
+describe("batchIngestData", () => {
+  test("ingests multiple records with auto_process=false", async () => {
+    const result = await batchIngestData({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "api",
+      records: [{ a: 1 }, { b: 2 }, { c: 3 }],
+      auto_process: false,
+      concurrency: 3,
+    });
+
+    expect(result.total).toBe(3);
+    expect(result.results.length).toBe(3);
+    expect(result.results.every((r) => r.status === "pending")).toBe(true);
+  });
+
+  test("processes all records when auto_process=true with mocked pipeline", async () => {
+    const structureSpy = spyOn(structureMod, "structureData").mockResolvedValue({
+      structured: { item: "test" },
+      confidence: 0.9,
+      fields_extracted: ["item"],
+      fields_missing: [],
+    });
+
+    const sanitizeSpy = spyOn(structureMod, "sanitizeData").mockResolvedValue({
+      sanitized: { item: "test" },
+      pii_removed: [],
+      duplicates_found: 0,
+      validation_errors: [],
+    });
+
+    const vectorizeSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue(
+      new Array(1536).fill(0.1)
+    );
+
+    const extractSpy = spyOn(graphMod, "extractGraphEntities").mockResolvedValue({
+      entities: [],
+      relations: [],
+    });
+
+    const result = await batchIngestData({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "api",
+      records: [{ item: "one" }, { item: "two" }],
+      auto_process: true,
+      concurrency: 2,
+    });
+
+    expect(result.total).toBe(2);
+    expect(result.results.every((r) => r.status === "complete")).toBe(true);
+
+    structureSpy.mockRestore();
+    sanitizeSpy.mockRestore();
+    vectorizeSpy.mockRestore();
+    extractSpy.mockRestore();
+  });
+
+  test("handles partial failures gracefully", async () => {
+    let callCount = 0;
+    const sanitizeSpy = spyOn(structureMod, "sanitizeData").mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("API unavailable");
+      }
+      return {
+        sanitized: { item: "ok" },
+        pii_removed: [],
+        duplicates_found: 0,
+        validation_errors: [],
+      };
+    });
+
+    const structureSpy = spyOn(structureMod, "structureData").mockResolvedValue({
+      structured: { item: "ok" },
+      confidence: 0.9,
+      fields_extracted: ["item"],
+      fields_missing: [],
+    });
+
+    const vectorizeSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue(
+      new Array(1536).fill(0.1)
+    );
+
+    const extractSpy = spyOn(graphMod, "extractGraphEntities").mockResolvedValue({
+      entities: [],
+      relations: [],
+    });
+
+    const result = await batchIngestData({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "api",
+      records: [{ item: "fail" }, { item: "ok" }, { item: "ok2" }],
+      auto_process: true,
+      concurrency: 3,
+    });
+
+    expect(result.total).toBe(3);
+    expect(result.results.some((r) => r.status === "error")).toBe(true);
+
+    structureSpy.mockRestore();
+    sanitizeSpy.mockRestore();
+    vectorizeSpy.mockRestore();
+    extractSpy.mockRestore();
+  });
+
+  test("returns error for nonexistent dataset", async () => {
+    const result = await batchIngestData({
+      tenant_id: tenantId,
+      dataset_id: "ds_nonexistent",
+      source: "api",
+      records: [{ x: 1 }],
+      auto_process: true,
+      concurrency: 1,
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.results[0].status).toBe("error");
+  });
+});
+
 describe("processPendingRecord", () => {
   test("returns error for nonexistent record", async () => {
     const result = await processPendingRecord("rec_nonexistent");
@@ -377,5 +500,204 @@ describe("processPendingRecord", () => {
     sanitizeSpy.mockRestore();
     vectorizeSpy.mockRestore();
     extractSpy.mockRestore();
+  });
+
+  test("processes a record with graph extraction creating entities and relations", async () => {
+    const ingestResult = await ingestData({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "api",
+      data: { author: "Bob", topic: "Vue" },
+      auto_process: false,
+    });
+
+    expect(ingestResult.status).toBe("pending");
+
+    const structureSpy = spyOn(structureMod, "structureData").mockResolvedValue({
+      structured: { author: "Bob", topic: "Vue" },
+      confidence: 0.9,
+      fields_extracted: ["author", "topic"],
+      fields_missing: [],
+    });
+
+    const sanitizeSpy = spyOn(structureMod, "sanitizeData").mockResolvedValue({
+      sanitized: { author: "Bob", topic: "Vue" },
+      pii_removed: [],
+      duplicates_found: 0,
+      validation_errors: [],
+    });
+
+    const vectorizeSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue(
+      new Array(1536).fill(0.1)
+    );
+
+    const extractSpy = spyOn(graphMod, "extractGraphEntities").mockResolvedValue({
+      entities: [
+        { name: "Bob", type: "person", properties: {} },
+        { name: "Vue", type: "concept", properties: {} },
+      ],
+      relations: [
+        { source: "Bob", target: "Vue", type: "uses", weight: 0.9 },
+      ],
+    });
+
+    const result = await processPendingRecord(ingestResult.record_id);
+    expect(result.status).toBe("complete");
+
+    const entities = listEntities(datasetId);
+    const bobEntity = entities.find((e) => e.name === "Bob");
+    expect(bobEntity).toBeDefined();
+
+    structureSpy.mockRestore();
+    sanitizeSpy.mockRestore();
+    vectorizeSpy.mockRestore();
+    extractSpy.mockRestore();
+  });
+
+  test("returns error when pipeline fails during processing", async () => {
+    const ingestResult = await ingestData({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "api",
+      data: { fail: true },
+      auto_process: false,
+    });
+
+    const sanitizeSpy = spyOn(structureMod, "sanitizeData").mockRejectedValue(
+      new Error("Pipeline unavailable")
+    );
+
+    const result = await processPendingRecord(ingestResult.record_id);
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("Processing failed");
+
+    sanitizeSpy.mockRestore();
+  });
+});
+
+describe("ingestData — dataset with schema", () => {
+  let schemaDsId: string;
+
+  beforeAll(() => {
+    const ds = createDataset({ tenant_id: tenantId, name: "Schema DS" });
+    schemaDsId = ds.id;
+    updateDataset(ds.id, {
+      schema: {
+        fields: [{ name: "title", type: "string", required: true }],
+        strict: false,
+      },
+    });
+  });
+
+  test("calls structureData when dataset has schema fields", async () => {
+    const structureSpy = spyOn(structureMod, "structureData").mockResolvedValue({
+      structured: { title: "Hello" },
+      confidence: 0.9,
+      fields_extracted: ["title"],
+      fields_missing: [],
+    });
+
+    const sanitizeSpy = spyOn(structureMod, "sanitizeData").mockResolvedValue({
+      sanitized: { title: "Hello" },
+      pii_removed: [],
+      duplicates_found: 0,
+      validation_errors: [],
+    });
+
+    const vectorizeSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue(
+      new Array(1536).fill(0.1)
+    );
+
+    const extractSpy = spyOn(graphMod, "extractGraphEntities").mockResolvedValue({
+      entities: [],
+      relations: [],
+    });
+
+    const result = await ingestData({
+      tenant_id: tenantId,
+      dataset_id: schemaDsId,
+      source: "api",
+      data: { raw_note: "Hello" },
+      auto_process: true,
+    });
+
+    expect(result.status).toBe("complete");
+    expect(structureSpy).toHaveBeenCalled();
+
+    structureSpy.mockRestore();
+    sanitizeSpy.mockRestore();
+    vectorizeSpy.mockRestore();
+    extractSpy.mockRestore();
+  });
+
+  test("processPendingRecord with schema fields calls structureData", async () => {
+    const ingestResult = await ingestData({
+      tenant_id: tenantId,
+      dataset_id: schemaDsId,
+      source: "api",
+      data: { raw_note: "schema process test" },
+      auto_process: false,
+    });
+
+    expect(ingestResult.status).toBe("pending");
+
+    const structureSpy = spyOn(structureMod, "structureData").mockResolvedValue({
+      structured: { title: "Schema Processed" },
+      confidence: 0.9,
+      fields_extracted: ["title"],
+      fields_missing: [],
+    });
+
+    const sanitizeSpy = spyOn(structureMod, "sanitizeData").mockResolvedValue({
+      sanitized: { title: "Schema Processed" },
+      pii_removed: [],
+      duplicates_found: 0,
+      validation_errors: [],
+    });
+
+    const vectorizeSpy = spyOn(vectorizeMod, "vectorizeSingle").mockResolvedValue(
+      new Array(1536).fill(0.1)
+    );
+
+    const extractSpy = spyOn(graphMod, "extractGraphEntities").mockResolvedValue({
+      entities: [],
+      relations: [],
+    });
+
+    const result = await processPendingRecord(ingestResult.record_id);
+    expect(result.status).toBe("complete");
+    expect(structureSpy).toHaveBeenCalled();
+
+    structureSpy.mockRestore();
+    sanitizeSpy.mockRestore();
+    vectorizeSpy.mockRestore();
+    extractSpy.mockRestore();
+  });
+
+  test("processPendingRecord returns error when dataset is deleted", async () => {
+    const result = await ingestData({
+      tenant_id: tenantId,
+      dataset_id: schemaDsId,
+      source: "api",
+      data: { text: "will be orphaned" },
+      auto_process: false,
+    });
+
+    expect(result.status).toBe("pending");
+
+    const ds = createDataset({ tenant_id: tenantId, name: "Temp to Delete" });
+    const tempResult = await ingestData({
+      tenant_id: tenantId,
+      dataset_id: ds.id,
+      source: "api",
+      data: { text: "orphan test" },
+      auto_process: false,
+    });
+
+    deleteDataset(ds.id);
+
+    const procResult = await processPendingRecord(tempResult.record_id);
+    expect(procResult.status).toBe("error");
+    expect(procResult.message).toContain("not found");
   });
 });

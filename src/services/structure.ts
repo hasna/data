@@ -20,6 +20,10 @@ function getClient(): OpenAI {
 }
 
 export async function structureData(request: StructureRequest): Promise<StructureResult> {
+  const config = getConfig();
+  if (!config.openai_api_key) {
+    throw new Error("OpenAI API key not configured — structuring unavailable");
+  }
   const client = getClient();
   const model = resolveChatModel(request.model);
 
@@ -62,6 +66,10 @@ Return a JSON object with:
 }
 
 export async function sanitizeData(request: SanitizeRequest): Promise<SanitizeResult> {
+  const config = getConfig();
+  if (!config.openai_api_key) {
+    throw new Error("OpenAI API key not configured — sanitization unavailable");
+  }
   const client = getClient();
   const model = resolveChatModel(request.model);
 

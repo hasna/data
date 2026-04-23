@@ -51,9 +51,9 @@ function parseContent(result: any): any {
 // --- Tests ---
 
 describe("MCP — list tools", () => {
-  test("server exposes 43 tools", async () => {
+  test("server exposes 44 tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(43);
+    expect(tools.length).toBe(44);
     const names = tools.map((t) => t.name);
     expect(names).toContain("create_tenant");
     expect(names).toContain("get_tenant");
@@ -88,6 +88,7 @@ describe("MCP — list tools", () => {
     expect(names).toContain("get_entity_neighbors");
     expect(names).toContain("delete_entities_by_dataset");
     expect(names).toContain("extract_graph_entities");
+    expect(names).toContain("batch_ingest_data");
   });
 });
 
@@ -614,6 +615,37 @@ describe("MCP — delete_entities_by_dataset", () => {
     const entities = parseContent(listResult);
     expect(entities.some((e: any) => e.name === "DeleteMe1")).toBe(false);
     expect(entities.some((e: any) => e.name === "DeleteMe2")).toBe(false);
+  });
+});
+
+describe("MCP — batch_ingest_data", () => {
+  test("batch_ingest_data creates multiple pending records", async () => {
+    const result = await callTool("batch_ingest_data", {
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "mcp",
+      records: [{ text: "mcp batch 1" }, { text: "mcp batch 2" }],
+      auto_process: false,
+      concurrency: 2,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = parseContent(result);
+    expect(data.total).toBe(2);
+    expect(data.results.length).toBe(2);
+    expect(data.results.every((r: any) => r.status === "pending")).toBe(true);
+  });
+
+  test("batch_ingest_data returns error for nonexistent dataset", async () => {
+    const result = await callTool("batch_ingest_data", {
+      tenant_id: tenantId,
+      dataset_id: "ds_nonexistent",
+      records: [{ x: 1 }],
+      auto_process: true,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = parseContent(result);
+    expect(data.results.length).toBe(1);
+    expect(data.results[0].status).toBe("error");
   });
 });
 

@@ -55,6 +55,17 @@ describe("OpenData SDK — tenants", () => {
     expect(client.tenants.get("tenant_nonexistent")).toBeNull();
     expect(client.tenants.getBySlug("nonexistent")).toBeNull();
   });
+
+  test("deletes a tenant", () => {
+    const tenant = client.tenants.create({ name: "To Delete", slug: "to-delete", type: "personal" });
+    const deleted = client.tenants.delete(tenant.id);
+    expect(deleted).toBe(true);
+    expect(client.tenants.get(tenant.id)).toBeNull();
+  });
+
+  test("delete returns false for nonexistent tenant", () => {
+    expect(client.tenants.delete("tenant_nonexistent")).toBe(false);
+  });
 });
 
 describe("OpenData SDK — datasets", () => {
@@ -85,6 +96,17 @@ describe("OpenData SDK — datasets", () => {
 
   test("returns null for nonexistent dataset", () => {
     expect(client.datasets.get("ds_nonexistent")).toBeNull();
+  });
+
+  test("deletes a dataset", () => {
+    const ds = client.datasets.create({ tenant_id: tenantId, name: "To Delete" });
+    const deleted = client.datasets.delete(ds.id);
+    expect(deleted).toBe(true);
+    expect(client.datasets.get(ds.id)).toBeNull();
+  });
+
+  test("delete returns false for nonexistent dataset", () => {
+    expect(client.datasets.delete("ds_nonexistent")).toBe(false);
   });
 });
 
@@ -332,6 +354,151 @@ describe("OpenData SDK — vector utilities", () => {
     await expect(
       client.vectorize({ texts: ["hello world"] }),
     ).rejects.toThrow();
+  });
+});
+
+describe("OpenData SDK — batchIngest", () => {
+  test("batchIngest creates multiple pending records", async () => {
+    const result = await client.batchIngest({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "sdk",
+      records: [{ text: "sdk batch 1" }, { text: "sdk batch 2" }],
+      auto_process: false,
+      concurrency: 2,
+    });
+    expect(result.total).toBe(2);
+    expect(result.results.length).toBe(2);
+    expect(result.results.every((r) => r.status === "pending")).toBe(true);
+  });
+
+  test("batchIngest processes records with auto_process=true", async () => {
+    const result = await client.batchIngest({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "sdk",
+      records: [{ text: "sdk auto" }],
+      auto_process: true,
+      concurrency: 1,
+    });
+    expect(result.total).toBe(1);
+    expect(result).toHaveProperty("results");
+  });
+});
+
+describe("OpenData SDK — record operations", () => {
+  test("records.updateStatus updates status", async () => {
+    const result = await client.ingest({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "sdk",
+      data: { text: "status test" },
+      auto_process: false,
+    });
+    const updated = client.records.updateStatus(result.record_id, "processing");
+    expect(updated).not.toBeNull();
+    expect(updated!.status).toBe("processing");
+  });
+
+  test("records.updateData updates record content", async () => {
+    const result = await client.ingest({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "sdk",
+      data: { text: "old" },
+      auto_process: false,
+    });
+    const updated = client.records.updateData(result.record_id, { text: "updated" });
+    expect(updated).not.toBeNull();
+    expect(updated!.data).toEqual({ text: "updated" });
+  });
+
+  test("records.deleteByDataset deletes all records", async () => {
+    await client.ingest({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "sdk",
+      data: { text: "del 1" },
+      auto_process: false,
+    });
+    await client.ingest({
+      tenant_id: tenantId,
+      dataset_id: datasetId,
+      source: "sdk",
+      data: { text: "del 2" },
+      auto_process: false,
+    });
+    const before = client.records.list(datasetId);
+    expect(before.length).toBeGreaterThanOrEqual(2);
+    const count = client.records.deleteByDataset(datasetId);
+    expect(count).toBeGreaterThanOrEqual(2);
+    const after = client.records.list(datasetId);
+    expect(after).toEqual([]);
+  });
+});
+
+describe("OpenData SDK — processRecord", () => {
+  test("processRecord returns error for nonexistent", async () => {
+    const result = await client.processRecord("rec_nonexistent");
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("not found");
+  });
+});
+
+describe("OpenData SDK — graph operations", () => {
+  test("graph.paths rejects when Neo4j unavailable", async () => {
+    await expect(client.graph.paths(tenantId, "person", "Nobody", "concept", "Nothing")).rejects.toThrow();
+  });
+
+  test("graph.neighbors rejects when Neo4j unavailable", async () => {
+    const entity = client.graph.createEntity(tenantId, datasetId, "person", "NeighborTest");
+    await expect(client.graph.neighbors(tenantId, entity.id)).rejects.toThrow();
+  });
+
+  test("graph.findByEntityName works with SQLite", () => {
+    client.graph.createEntity(tenantId, datasetId, "person", "FindMe");
+    const found = client.graph.findByEntityName(tenantId, "FindMe", "person");
+    expect(found).not.toBeNull();
+    expect(found!.name).toBe("FindMe");
+  });
+
+  test("graph.updateEntity updates an entity", () => {
+    const entity = client.graph.createEntity(tenantId, datasetId, "person", "UpdateMe");
+    const updated = client.graph.updateEntity(entity.id, { name: "Updated" });
+    expect(updated).not.toBeNull();
+    expect(updated!.name).toBe("Updated");
+  });
+
+  test("graph.updateRelation updates a relation", () => {
+    const e1 = client.graph.createEntity(tenantId, datasetId, "person", "RelUpdSrc");
+    const e2 = client.graph.createEntity(tenantId, datasetId, "person", "RelUpdTgt");
+    const relation = client.graph.createRelation(tenantId, "test", e1.id, e2.id);
+    const updated = client.graph.updateRelation(relation.id, { weight: 0.5 });
+    expect(updated).not.toBeNull();
+    expect(updated!.weight).toBe(0.5);
+  });
+});
+
+describe("OpenData SDK — search", () => {
+  test("vectorSearch returns error when vectorization unavailable", async () => {
+    const result = await client.vectorSearch({ tenant_id: tenantId, query: "hello" });
+    expect(result).toHaveProperty("records");
+    expect(result.total).toBe(0);
+  });
+
+  test("graphSearch returns empty when no entities exist", async () => {
+    const result = await client.graphSearch({ tenant_id: tenantId, query: "hello" });
+    expect(result).toHaveProperty("records");
+  });
+
+  test("hybridSearch returns results", async () => {
+    const result = await client.hybridSearch({ tenant_id: tenantId, query: "hello" });
+    expect(result).toHaveProperty("records");
+  });
+
+  test("search dispatcher routes to vector by default", async () => {
+    const result = await client.search({ tenant_id: tenantId, query: "hello" });
+    expect(result).toHaveProperty("records");
   });
 });
 

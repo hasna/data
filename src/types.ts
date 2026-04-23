@@ -230,7 +230,7 @@ export interface GraphExtractResult {
 export interface IngestRequest {
   tenant_id: string;
   dataset_id: string;
-  source: "file" | "session" | "api" | "manual" | "sdk";
+  source: "file" | "session" | "api" | "manual" | "sdk" | "mcp";
   data: unknown;
   auto_process?: boolean;
 }
@@ -239,6 +239,20 @@ export interface IngestResult {
   record_id: string;
   status: DataRecord["status"];
   message: string;
+}
+
+export interface BatchIngestRequest {
+  tenant_id: string;
+  dataset_id: string;
+  source: "file" | "session" | "api" | "manual" | "sdk" | "mcp";
+  records: unknown[];
+  auto_process?: boolean;
+  concurrency?: number;
+}
+
+export interface BatchIngestResult {
+  total: number;
+  results: IngestResult[];
 }
 
 // --- Config ---

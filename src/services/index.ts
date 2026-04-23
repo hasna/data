@@ -20,4 +20,4 @@ export { createEntity, getEntity, listEntities, findEntityByName, createRelation
 export { vectorSearch, graphSearch, hybridSearch, search } from "./search.js";
 
 // Indexing
-export { ingestData, processPendingRecord } from "./indexing.js";
+export { ingestData, processPendingRecord, batchIngestData } from "./indexing.js";

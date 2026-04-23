@@ -24,6 +24,7 @@ import {
   countRecordsByStatus,
   ingestData,
   processPendingRecord,
+  batchIngestData,
   vectorSearch,
   graphSearch,
   hybridSearch,
@@ -277,6 +278,25 @@ function matchRoute(url: string, method: string): ((req: Request) => Promise<Res
         source: (b.source as any) ?? "api",
         data: b.data,
         auto_process: (b.auto_process as boolean) ?? true,
+      });
+      return json(result, 201);
+    };
+  }
+
+  // --- Batch Ingest ---
+  if (path === "/api/ingest/batch" && method === "POST") {
+    return async (req) => {
+      const b = await body(req);
+      if (!b.tenant_id || !b.dataset_id || !b.records || !Array.isArray(b.records)) {
+        return error("tenant_id, dataset_id, and records array are required");
+      }
+      const result = await batchIngestData({
+        tenant_id: b.tenant_id as string,
+        dataset_id: b.dataset_id as string,
+        source: (b.source as any) ?? "api",
+        records: b.records as unknown[],
+        auto_process: (b.auto_process as boolean) ?? true,
+        concurrency: (b.concurrency as number) ?? 5,
       });
       return json(result, 201);
     };

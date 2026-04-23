@@ -19,6 +19,7 @@ import {
   updateDataset,
   deleteDataset,
   ingestData,
+  batchIngestData,
   search,
   createRecord,
   getRecord,
@@ -227,6 +228,29 @@ program
       source: "api",
       data,
       auto_process: opts.process,
+    });
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("batch-ingest")
+  .description("Batch ingest multiple records into a dataset")
+  .requiredOption("-t, --tenant <tenantId>", "Tenant ID")
+  .requiredOption("-d, --dataset <datasetId>", "Dataset ID")
+  .requiredOption("-f, --file <path>", "Input file (JSON array)")
+  .option("--no-process", "Do not auto-process")
+  .option("-c, --concurrency <n>", "Max concurrent records", "5")
+  .action(async (opts) => {
+    const fs = await import("node:fs/promises");
+    const records = JSON.parse(await fs.readFile(opts.file, "utf-8")) as unknown[];
+
+    const result = await batchIngestData({
+      tenant_id: opts.tenant,
+      dataset_id: opts.dataset,
+      source: "api",
+      records,
+      auto_process: opts.process,
+      concurrency: parseInt(opts.concurrency, 10),
     });
     console.log(JSON.stringify(result, null, 2));
   });

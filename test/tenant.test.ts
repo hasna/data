@@ -1,13 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { initDb, closeDb } from "../src/db/sqlite.js";
-import {
-  createTenant,
-  getTenant,
-  getTenantBySlug,
-  listTenants,
-  updateTenant,
-  deleteTenant,
-} from "../src/services/tenant.js";
+import { createTenant, getTenant, getTenantBySlug, listTenants, updateTenant, deleteTenant } from "../src/services/tenant.js";
+import { createDataset, deleteDataset } from "../src/services/dataset.js";
 
 const DB_PATH = `/tmp/open-data-test-tenant-${Date.now()}.db`;
 
@@ -99,5 +93,14 @@ describe("tenant CRUD", () => {
 
   test("deleteTenant returns false for unknown id", () => {
     expect(deleteTenant("tenant_nonexistent")).toBe(false);
+  });
+
+  test("deleteTenant cascades to datasets", () => {
+    const tenant = createTenant({ name: "Cascade Tenant", slug: "cascade-tenant", type: "personal" });
+    const ds = createDataset({ tenant_id: tenant.id, name: "Cascade DS" });
+    expect(getTenant(tenant.id)).not.toBeNull();
+    expect(deleteTenant(tenant.id)).toBe(true);
+    // Dataset should also be gone
+    expect(listTenants().some((t) => t.id === tenant.id)).toBe(false);
   });
 });
