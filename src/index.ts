@@ -87,6 +87,7 @@ export {
   // Indexing
   ingestData,
   processPendingRecord,
+  batchIngestData,
 } from "./services/indexing.js";
 
 // --- Database ---

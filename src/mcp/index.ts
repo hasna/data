@@ -256,7 +256,7 @@ server.tool("ingest_data", "Ingest data into a dataset (runs full pipeline if au
   tenant_id: z.string().describe("Tenant ID"),
   dataset_id: z.string().describe("Dataset ID"),
   data: z.any().describe("Data to ingest (any JSON)"),
-  source: z.enum(["file", "session", "api", "mcp", "manual"]).optional().describe("Source type"),
+  source: z.enum(["file", "session", "api", "mcp", "manual", "sdk"]).optional().describe("Source type"),
   auto_process: z.boolean().optional().describe("Auto-run full pipeline (default true)"),
 }, async (params) => {
   const result = await ingestData({
@@ -280,7 +280,7 @@ server.tool("batch_ingest_data", "Ingest multiple records into a dataset at once
   tenant_id: z.string().describe("Tenant ID"),
   dataset_id: z.string().describe("Dataset ID"),
   records: z.array(z.any()).describe("Array of records to ingest (any JSON)"),
-  source: z.enum(["file", "session", "api", "mcp", "manual"]).optional().describe("Source type"),
+  source: z.enum(["file", "session", "api", "mcp", "manual", "sdk"]).optional().describe("Source type"),
   auto_process: z.boolean().optional().describe("Auto-run full pipeline (default true)"),
   concurrency: z.number().optional().describe("Max concurrent records (default 5)"),
 }, async (params) => {

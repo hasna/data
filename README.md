@@ -143,7 +143,7 @@ Start the MCP server:
 data-mcp
 ```
 
-Exposes 43 tools across: tenants (6), datasets (5), records (8), graph (12), search (1), vectorize/similarity (4), ingest (1), process (1), extract (1), structure (1), sanitize (1).
+Exposes 44 tools across: tenants (6), datasets (5), records (9), graph (13), search (1), vectorize/similarity (4), ingest (2), process (1), extract (1), structure (1), sanitize (1).
 
 Compatible with any MCP client. Configure in your AI agent settings:
 
@@ -182,7 +182,10 @@ Key endpoints:
 | POST | `/api/search` | Unified search (vector/graph/hybrid) |
 | GET | `/api/search/vector` | Vector search (GET) |
 | GET/POST/PATCH/DELETE | `/api/graph/entities` | Entity CRUD |
+| GET | `/api/graph/entities/find` | Find entity by type and name |
+| DELETE | `/api/graph/entities/dataset` | Delete all entities for a dataset |
 | GET/POST/DELETE | `/api/graph/relations` | Relation CRUD |
+| PATCH | `/api/records/:id/data` | Update record data fields |
 | POST | `/api/graph/paths` | Find paths between entities |
 | POST | `/api/graph/neighbors` | Get entity neighbors |
 | POST | `/api/graph/extract` | Extract graph entities from data |
@@ -253,7 +256,7 @@ pending → structured → sanitized → vectorized → graphed → complete
 bun install          # Install dependencies
 bun run build        # Build all binaries
 bun run typecheck    # Type check
-bun run test         # Run tests (349 tests across 15 files)
+bun run test         # Run tests (355 tests across 15 files)
 bun run dev:cli      # Run CLI in development mode
 bun run dev:mcp      # Run MCP server in development mode
 bun run dev:serve    # Run REST API in development mode
