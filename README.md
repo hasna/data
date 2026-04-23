@@ -7,7 +7,7 @@ Structured data indexing with local knowledge graphs. A CLI, MCP server, REST AP
 ```
 @hasna/data
 ├── CLI (data)       — 44 commands via commander + ink TUI
-├── MCP Server       — 40 tools for AI agent integration
+├── MCP Server       — 43 tools for AI agent integration
 ├── REST API         — 40+ routes via Bun.serve
 ├── SDK              — TypeScript library with full API coverage
 └── Library exports  — Import services, types, and utilities directly
@@ -143,7 +143,7 @@ Start the MCP server:
 data-mcp
 ```
 
-Exposes 39 tools across: tenants (6), datasets (5), records (8), graph (10), search (4), vectorize/similarity (2), ingest (1), process (1), extract (1), structure (1), sanitize (1).
+Exposes 43 tools across: tenants (6), datasets (5), records (8), graph (12), search (1), vectorize/similarity (4), ingest (1), process (1), extract (1), structure (1), sanitize (1).
 
 Compatible with any MCP client. Configure in your AI agent settings:
 
@@ -199,13 +199,13 @@ import { OpenData } from "@hasna/data/sdk";
 const client = new OpenData();
 
 // Tenants
-const tenant = await client.tenants.create({ name: "My Org", slug: "my-org" });
+const tenant = client.tenants.create({ name: "My Org", slug: "my-org" });
 
 // Datasets
-const dataset = await client.datasets.create({ tenant_id: tenant.id, name: "Notes" });
+const dataset = client.datasets.create({ tenant_id: tenant.id, name: "Notes" });
 
 // Records
-const record = await client.records.create(dataset.id, tenant.id, { text: "Hello world" });
+const record = client.records.create(dataset.id, tenant.id, { text: "Hello world" });
 
 // Process through full pipeline
 await client.processRecord(record.id);
@@ -214,8 +214,8 @@ await client.processRecord(record.id);
 const results = await client.search.vector({ tenant_id: tenant.id, query: "hello" });
 
 // Graph
-const entities = await client.graph.listEntities(dataset.id);
-const paths = await client.graph.findPaths(tenant.id, "person", "Alice", "concept", "ML");
+const entities = client.graph.entities(dataset.id);
+const paths = await client.graph.paths(tenant.id, "person", "Alice", "concept", "ML");
 
 // Cleanup
 client.close();
@@ -253,7 +253,7 @@ pending → structured → sanitized → vectorized → graphed → complete
 bun install          # Install dependencies
 bun run build        # Build all binaries
 bun run typecheck    # Type check
-bun run test         # Run tests (275 tests across 12 files)
+bun run test         # Run tests (289 tests across 12 files)
 bun run dev:cli      # Run CLI in development mode
 bun run dev:mcp      # Run MCP server in development mode
 bun run dev:serve    # Run REST API in development mode
