@@ -51,9 +51,9 @@ function parseContent(result: any): any {
 // --- Tests ---
 
 describe("MCP — list tools", () => {
-  test("server exposes 39 tools", async () => {
+  test("server exposes 43 tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(39);
+    expect(tools.length).toBe(43);
     const names = tools.map((t) => t.name);
     expect(names).toContain("create_tenant");
     expect(names).toContain("get_tenant");

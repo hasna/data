@@ -10,7 +10,7 @@ let datasetId: string;
 
 beforeAll(async () => {
   serverProc = Bun.spawn(["bun", "run", "src/server/index.ts"], {
-    env: { ...process.env, DATA_DB_PATH: DB_PATH, DATA_PORT: String(PORT) },
+    env: { ...process.env, DATA_DB_PATH: DB_PATH, PORT: String(PORT) },
     stdout: "pipe",
     stderr: "pipe",
   });

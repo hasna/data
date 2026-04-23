@@ -176,17 +176,17 @@ describe("OpenData SDK — graph", () => {
     expect(entities.length).toBeGreaterThanOrEqual(3);
   });
 
-  test("deletes an entity", () => {
+  test("deletes an entity", async () => {
     const entity = client.graph.createEntity(tenantId, datasetId, "concept", "ToDelete");
-    const ok = client.graph.deleteEntity(entity.id);
+    const ok = await client.graph.deleteEntity(entity.id);
     expect(ok).toBe(true);
     // Verify gone from list
     const entities = client.graph.entities(datasetId);
     expect(entities.some((e: any) => e.id === entity.id)).toBe(false);
   });
 
-  test("deleteEntity returns false for nonexistent", () => {
-    const ok = client.graph.deleteEntity("ent_nonexistent");
+  test("deleteEntity returns false for nonexistent", async () => {
+    const ok = await client.graph.deleteEntity("ent_nonexistent");
     expect(ok).toBe(false);
   });
 
@@ -218,38 +218,38 @@ describe("OpenData SDK — graph", () => {
     expect(found).toBeNull();
   });
 
-  test("deleteRelation deletes a relation", () => {
+  test("deleteRelation deletes a relation", async () => {
     const ent1 = client.graph.createEntity(tenantId, datasetId, "person", "DelRelSrc");
     const ent2 = client.graph.createEntity(tenantId, datasetId, "person", "DelRelTgt");
     const relation = client.graph.createRelation(tenantId, "removes", ent1.id, ent2.id);
-    const ok = client.graph.deleteRelation(relation.id);
+    const ok = await client.graph.deleteRelation(relation.id);
     expect(ok).toBe(true);
     // Verify gone
     const found = client.graph.getRelation(relation.id);
     expect(found).toBeNull();
   });
 
-  test("deleteRelation returns false for nonexistent", () => {
-    const ok = client.graph.deleteRelation("rel_nonexistent");
+  test("deleteRelation returns false for nonexistent", async () => {
+    const ok = await client.graph.deleteRelation("rel_nonexistent");
     expect(ok).toBe(false);
   });
 
-  test("deleteRelation deletes a relation via SDK", () => {
+  test("deleteRelation deletes a relation via SDK", async () => {
     const ent1 = client.graph.createEntity(tenantId, datasetId, "concept", "SDKRelSrc");
     const ent2 = client.graph.createEntity(tenantId, datasetId, "concept", "SDKRelTgt");
     const relation = client.graph.createRelation(tenantId, "links", ent1.id, ent2.id);
-    const ok = client.graph.deleteRelation(relation.id);
+    const ok = await client.graph.deleteRelation(relation.id);
     expect(ok).toBe(true);
     const found = client.graph.getRelation(relation.id);
     expect(found).toBeNull();
   });
 
-  test("deleteEntitiesByDataset deletes all entities for a dataset", () => {
+  test("deleteEntitiesByDataset deletes all entities for a dataset", async () => {
     // Create a fresh entity in this dataset
     client.graph.createEntity(tenantId, datasetId, "concept", "DsDelTest");
     const entitiesBefore = client.graph.entities(datasetId);
     expect(entitiesBefore.some((e: any) => e.name === "DsDelTest")).toBe(true);
-    const count = client.graph.deleteEntitiesByDataset(datasetId);
+    const count = await client.graph.deleteEntitiesByDataset(datasetId);
     expect(count).toBeGreaterThanOrEqual(1);
     // Verify all gone
     const entitiesAfter = client.graph.entities(datasetId);
@@ -271,32 +271,44 @@ describe("OpenData SDK — extractEntities", () => {
   test("throws when OpenAI is unavailable", async () => {
     // OPENAI_API_KEY may be empty or point to a provider without the model
     // Either way — should throw, not hang
-    await expect(
-      client.extractEntities({
-        data: { x: 1 },
-        entity_types: ["person"],
-        relation_types: ["knows"],
-      }),
-    ).rejects.toThrow();
+    const savedKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      await expect(
+        client.extractEntities({
+          data: { x: 1 },
+          entity_types: ["person"],
+          relation_types: ["knows"],
+        }),
+      ).rejects.toThrow();
+    } finally {
+      process.env.OPENAI_API_KEY = savedKey;
+    }
   });
 });
 
 describe("OpenData SDK — structure/sanitize", () => {
   test("structure throws when OpenAI is unavailable", async () => {
     await expect(
-      client.structure({
-        raw_data: { name: "test" },
-        dataset_schema: { fields: [{ name: "name", type: "string", required: true }], strict: false },
-      }),
+      Promise.race([
+        client.structure({
+          raw_data: { name: "test" },
+          dataset_schema: { fields: [{ name: "name", type: "string", required: true }], strict: false },
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("OpenAI call timed out — expected to throw")), 10000)),
+      ]),
     ).rejects.toThrow();
   });
 
   test("sanitize throws when OpenAI is unavailable", async () => {
     await expect(
-      client.sanitize({
-        data: { name: "test" },
-        dataset_schema: { fields: [{ name: "name", type: "string", required: true }], strict: false },
-      }),
+      Promise.race([
+        client.sanitize({
+          data: { name: "test" },
+          dataset_schema: { fields: [{ name: "name", type: "string", required: true }], strict: false },
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("OpenAI call timed out — expected to throw")), 10000)),
+      ]),
     ).rejects.toThrow();
   });
 });

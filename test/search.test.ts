@@ -305,7 +305,7 @@ describe("graphSearch", () => {
 
 
 describe("deleteRelation", () => {
-  test("deletes a relation", () => {
+  test("deletes a relation", async () => {
     const s = createEntity(tenantId, datasetId, "person", "DelRelSrc");
     const t = createEntity(tenantId, datasetId, "concept", "DelRelTgt");
     const rel = createRelation(tenantId, "test_rel", s.id, t.id);
@@ -313,13 +313,13 @@ describe("deleteRelation", () => {
     const { getRelation } = require("../src/services/graph.js");
     expect(getRelation(rel.id)).not.toBeNull();
 
-    const deleted = deleteRelation(rel.id);
+    const deleted = await deleteRelation(rel.id);
     expect(deleted).toBe(true);
     expect(getRelation(rel.id)).toBeNull();
   });
 
-  test("returns false for nonexistent relation", () => {
-    const deleted = deleteRelation("rel_nonexistent");
+  test("returns false for nonexistent relation", async () => {
+    const deleted = await deleteRelation("rel_nonexistent");
     expect(deleted).toBe(false);
   });
 });

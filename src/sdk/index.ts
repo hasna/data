@@ -53,11 +53,14 @@ import {
   listRelations,
   findGraphPaths,
   getEntityNeighbors,
+  findEntityByName,
   extractGraphEntities,
   createEntity,
   createRelation,
   deleteEntity,
   deleteRelation,
+  updateEntity,
+  updateRelation,
   getEntity,
   getRelation,
   deleteEntitiesByDataset,
@@ -145,8 +148,8 @@ export class OpenData {
   }
 
   graph = {
-    entities: (datasetId: string, type?: string, limit?: number) => { ensureInit(); return listEntities(datasetId, type, limit ?? 50); },
-    relations: (datasetId: string, limit?: number) => { ensureInit(); return listRelations(datasetId, limit ?? 50); },
+    entities: (datasetId: string, type?: string, limit?: number, offset?: number) => { ensureInit(); return listEntities(datasetId, type, limit ?? 50, offset ?? 0); },
+    relations: (datasetId: string, limit?: number, offset?: number) => { ensureInit(); return listRelations(datasetId, limit ?? 50, offset ?? 0); },
     createEntity: (tenantId: string, datasetId: string, type: string, name: string, properties?: Record<string, unknown>) => {
       ensureInit();
       return createEntity(tenantId, datasetId, type, name, properties ?? {});
@@ -157,8 +160,10 @@ export class OpenData {
     },
     getEntity: (id: string) => { ensureInit(); return getEntity(id); },
     getRelation: (id: string) => { ensureInit(); return getRelation(id); },
-    deleteEntity: (id: string) => { ensureInit(); return deleteEntity(id); },
-    deleteRelation: (id: string) => { ensureInit(); return deleteRelation(id); },
+    deleteEntity: async (id: string) => { ensureInit(); return deleteEntity(id); },
+    deleteRelation: async (id: string) => { ensureInit(); return deleteRelation(id); },
+    updateEntity: (id: string, updates: Parameters<typeof updateEntity>[1]) => { ensureInit(); return updateEntity(id, updates); },
+    updateRelation: (id: string, updates: Parameters<typeof updateRelation>[1]) => { ensureInit(); return updateRelation(id, updates); },
     paths: (tenantId: string, startType: string, startName: string, endType: string, endName: string, maxDepth?: number) => {
       ensureInit();
       return findGraphPaths(tenantId, startType, startName, endType, endName, maxDepth ?? 5);
@@ -167,7 +172,11 @@ export class OpenData {
       ensureInit();
       return getEntityNeighbors(tenantId, entityId, depth ?? 1);
     },
-    deleteEntitiesByDataset: (datasetId: string) => { ensureInit(); return deleteEntitiesByDataset(datasetId); },
+    findByEntityName: (tenantId: string, name: string, type?: string) => {
+      ensureInit();
+      return findEntityByName(tenantId, name, type);
+    },
+    deleteEntitiesByDataset: async (datasetId: string) => { ensureInit(); return deleteEntitiesByDataset(datasetId); },
   };
 
   async extractEntities(input: Parameters<typeof extractGraphEntities>[0]) {

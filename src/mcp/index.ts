@@ -38,13 +38,17 @@ import {
   getRelation,
   deleteEntity,
   deleteRelation,
+  updateEntity,
+  updateRelation,
   deleteEntitiesByDataset,
   extractGraphEntities,
   findGraphPaths,
+  findEntityByName,
   getEntityNeighbors,
   structureData,
   sanitizeData,
   vectorizeTexts,
+  vectorizeSingle,
   cosineSimilarity,
   textToSearchable,
 } from "../services/index.js";
@@ -301,16 +305,18 @@ server.tool("list_entities", "List entities in a dataset", {
   dataset_id: z.string().describe("Dataset ID"),
   type: z.string().optional().describe("Filter by entity type"),
   limit: z.number().optional().describe("Max results"),
+  offset: z.number().optional().describe("Result offset for pagination"),
 }, async (params) => {
-  const entities = listEntities(params.dataset_id, params.type, params.limit ?? 50);
+  const entities = listEntities(params.dataset_id, params.type, params.limit ?? 50, params.offset ?? 0);
   return { content: [{ type: "text", text: JSON.stringify(entities, null, 2) }] };
 });
 
 server.tool("list_relations", "List relations in a dataset", {
   dataset_id: z.string().describe("Dataset ID"),
   limit: z.number().optional().describe("Max results"),
+  offset: z.number().optional().describe("Result offset for pagination"),
 }, async (params) => {
-  const relations = listRelations(params.dataset_id, params.limit ?? 50);
+  const relations = listRelations(params.dataset_id, params.limit ?? 50, params.offset ?? 0);
   return { content: [{ type: "text", text: JSON.stringify(relations, null, 2) }] };
 });
 
@@ -369,15 +375,45 @@ server.tool("get_relation", "Get a relation by ID", {
 server.tool("delete_entity", "Delete an entity from the graph", {
   id: z.string().describe("Entity ID"),
 }, async (params) => {
-  const ok = deleteEntity(params.id);
+  const ok = await deleteEntity(params.id);
   return { content: [{ type: "text", text: ok ? "Deleted" : "Not found" }] };
 });
 
 server.tool("delete_relation", "Delete a relation from the graph", {
   id: z.string().describe("Relation ID"),
 }, async (params) => {
-  const ok = deleteRelation(params.id);
+  const ok = await deleteRelation(params.id);
   return { content: [{ type: "text", text: ok ? "Deleted" : "Not found" }] };
+});
+
+server.tool("update_entity", "Update an entity's properties", {
+  id: z.string().describe("Entity ID"),
+  type: z.string().optional().describe("Entity type"),
+  name: z.string().optional().describe("Entity name"),
+  properties: z.any().optional().describe("Entity properties (JSON object)"),
+}, async (params) => {
+  const updates: Record<string, unknown> = {};
+  if (params.type) updates.type = params.type;
+  if (params.name) updates.name = params.name;
+  if (params.properties !== undefined) updates.properties = params.properties;
+  const entity = updateEntity(params.id, updates);
+  if (!entity) return { content: [{ type: "text", text: "Not found" }], isError: true };
+  return { content: [{ type: "text", text: JSON.stringify(entity, null, 2) }] };
+});
+
+server.tool("update_relation", "Update a relation's properties", {
+  id: z.string().describe("Relation ID"),
+  type: z.string().optional().describe("Relation type"),
+  weight: z.number().optional().describe("Relation weight"),
+  properties: z.any().optional().describe("Relation properties (JSON object)"),
+}, async (params) => {
+  const updates: Record<string, unknown> = {};
+  if (params.type) updates.type = params.type;
+  if (params.weight !== undefined) updates.weight = params.weight;
+  if (params.properties !== undefined) updates.properties = params.properties;
+  const relation = updateRelation(params.id, updates);
+  if (!relation) return { content: [{ type: "text", text: "Not found" }], isError: true };
+  return { content: [{ type: "text", text: JSON.stringify(relation, null, 2) }] };
 });
 
 server.tool("find_graph_paths", "Find paths between two entities in the graph", {
@@ -412,10 +448,19 @@ server.tool("get_entity_neighbors", "Get neighbors of an entity in the graph", {
   return { content: [{ type: "text", text: JSON.stringify(neighbors, null, 2) }] };
 });
 
+server.tool("find_entity_by_name", "Find an entity by name within a tenant", {
+  tenant_id: z.string().describe("Tenant ID"),
+  name: z.string().describe("Entity name to find"),
+  type: z.string().optional().describe("Optional entity type filter"),
+}, async (params) => {
+  const entity = findEntityByName(params.tenant_id, params.name, params.type);
+  return { content: [{ type: "text", text: entity ? JSON.stringify(entity, null, 2) : "Entity not found" }] };
+});
+
 server.tool("delete_entities_by_dataset", "Delete all entities and relations in a dataset", {
   dataset_id: z.string().describe("Dataset ID"),
 }, async (params) => {
-  const count = deleteEntitiesByDataset(params.dataset_id);
+  const count = await deleteEntitiesByDataset(params.dataset_id);
   return { content: [{ type: "text", text: `Deleted ${count} entities` }] };
 });
 
@@ -452,6 +497,18 @@ server.tool("vectorize_texts", "Convert text strings to vector embeddings", {
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (err: any) {
     return { content: [{ type: "text", text: JSON.stringify({ embeddings: [], model: "", dimensions: 0, total_tokens: 0, error: err.message ?? "Vectorize failed" }, null, 2) }] };
+  }
+});
+
+server.tool("vectorize_single", "Convert a single text string to a vector embedding", {
+  text: z.string().describe("Text string to vectorize"),
+  model: z.string().optional().describe("Embedding model to use"),
+}, async (params) => {
+  try {
+    const embedding = await vectorizeSingle(params.text, params.model);
+    return { content: [{ type: "text", text: JSON.stringify({ embedding, dimensions: embedding.length }, null, 2) }] };
+  } catch (err: any) {
+    return { content: [{ type: "text", text: JSON.stringify({ embedding: [], error: err.message ?? "Vectorize failed" }, null, 2) }], isError: true };
   }
 });
 

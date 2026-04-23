@@ -22,7 +22,10 @@ export async function ingestData(request: IngestRequest): Promise<IngestResult> 
   }
 
   // Create record in pending state
-  const record = createRecord(request.dataset_id, request.tenant_id, {}, request.data);
+  const recordData = typeof request.data === "object" && request.data !== null
+    ? request.data as Record<string, unknown>
+    : { raw: request.data };
+  const record = createRecord(request.dataset_id, request.tenant_id, recordData, request.data);
 
   if (!request.auto_process) {
     incrementRecordCount(request.dataset_id);

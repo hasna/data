@@ -33,6 +33,7 @@ import {
   deleteEntitiesByDataset,
   extractGraphEntities,
   findGraphPaths,
+  findEntityByName,
   getEntityNeighbors,
   createEntity,
   createRelation,
@@ -40,6 +41,8 @@ import {
   getRelation,
   deleteEntity,
   deleteRelation,
+  updateEntity,
+  updateRelation,
   structureData,
   sanitizeData,
   vectorizeTexts,
@@ -329,8 +332,9 @@ function matchRoute(url: string, method: string): ((req: Request) => Promise<Res
       const datasetId = urlObj.searchParams.get("dataset_id");
       if (!datasetId) return error("dataset_id query param required");
       const type = urlObj.searchParams.get("type") ?? undefined;
-      const limit = parseInt(urlObj.searchParams.get("limit") ?? "50", 10);
-      return json(listEntities(datasetId, type, limit));
+      const limit = parseInt(urlObj.searchParams.get("limit") ?? "100", 10);
+      const offset = parseInt(urlObj.searchParams.get("offset") ?? "0", 10);
+      return json(listEntities(datasetId, type, limit, offset));
     };
   }
 
@@ -358,8 +362,22 @@ function matchRoute(url: string, method: string): ((req: Request) => Promise<Res
       const urlObj = new URL(req.url);
       const datasetId = urlObj.searchParams.get("dataset_id");
       if (!datasetId) return error("dataset_id query param required");
-      const count = deleteEntitiesByDataset(datasetId);
+      const count = await deleteEntitiesByDataset(datasetId);
       return json({ deleted: true, count });
+    };
+  }
+
+  // --- Graph: Find Entity by Name ---
+  if (path === "/api/graph/entities/find" && method === "GET") {
+    return async (req) => {
+      const urlObj = new URL(req.url);
+      const tenantId = urlObj.searchParams.get("tenant_id");
+      const name = urlObj.searchParams.get("name");
+      if (!tenantId || !name) return error("tenant_id and name are required");
+      const type = urlObj.searchParams.get("type") ?? undefined;
+      const entity = findEntityByName(tenantId, name, type);
+      if (!entity) return error("Entity not found", 404);
+      return json(entity);
     };
   }
 
@@ -377,8 +395,19 @@ function matchRoute(url: string, method: string): ((req: Request) => Promise<Res
   if (path.startsWith("/api/graph/entities/") && method === "DELETE") {
     const id = path.split("/").pop()!;
     return async () => {
-      const ok = deleteEntity(id);
+      const ok = await deleteEntity(id);
       return ok ? json({ deleted: true }) : error("Entity not found", 404);
+    };
+  }
+
+  // --- Graph: Update Entity ---
+  if (path.startsWith("/api/graph/entities/") && method === "PATCH") {
+    const id = path.split("/").pop()!;
+    return async (req) => {
+      const b = await body(req);
+      const entity = updateEntity(id, b as any);
+      if (!entity) return error("Entity not found", 404);
+      return json(entity);
     };
   }
 
@@ -388,8 +417,9 @@ function matchRoute(url: string, method: string): ((req: Request) => Promise<Res
       const urlObj = new URL(req.url);
       const datasetId = urlObj.searchParams.get("dataset_id");
       if (!datasetId) return error("dataset_id query param required");
-      const limit = parseInt(urlObj.searchParams.get("limit") ?? "50", 10);
-      return json(listRelations(datasetId, limit));
+      const limit = parseInt(urlObj.searchParams.get("limit") ?? "100", 10);
+      const offset = parseInt(urlObj.searchParams.get("offset") ?? "0", 10);
+      return json(listRelations(datasetId, limit, offset));
     };
   }
 
@@ -426,8 +456,19 @@ function matchRoute(url: string, method: string): ((req: Request) => Promise<Res
   if (path.startsWith("/api/graph/relations/") && method === "DELETE") {
     const id = path.split("/").pop()!;
     return async () => {
-      const ok = deleteRelation(id);
+      const ok = await deleteRelation(id);
       return ok ? json({ deleted: true }) : error("Relation not found", 404);
+    };
+  }
+
+  // --- Graph: Update Relation ---
+  if (path.startsWith("/api/graph/relations/") && method === "PATCH") {
+    const id = path.split("/").pop()!;
+    return async (req) => {
+      const b = await body(req);
+      const relation = updateRelation(id, b as any);
+      if (!relation) return error("Relation not found", 404);
+      return json(relation);
     };
   }
 

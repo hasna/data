@@ -9,6 +9,7 @@ import { closeNeo4j, checkNeo4jHealth } from "../db/neo4j.js";
 import {
   createTenant,
   getTenant,
+  getTenantBySlug,
   listTenants,
   updateTenant,
   deleteTenant,
@@ -32,11 +33,14 @@ import {
   listRelations,
   createEntity,
   createRelation,
+  updateEntity,
+  updateRelation,
   getEntity,
   getRelation,
   deleteEntity,
   deleteRelation,
   deleteEntitiesByDataset,
+  findEntityByName,
   findGraphPaths,
   getEntityNeighbors,
   extractGraphEntities,
@@ -87,6 +91,16 @@ tenant
   .action(() => {
     const tenants = listTenants();
     console.log(JSON.stringify(tenants, null, 2));
+  });
+
+tenant
+  .command("get-by-slug")
+  .description("Get a tenant by slug")
+  .argument("<slug>", "Tenant slug")
+  .action((slug) => {
+    const t = getTenantBySlug(slug);
+    if (!t) { console.error(chalk.red("Tenant not found")); process.exit(1); }
+    console.log(JSON.stringify(t, null, 2));
   });
 
 tenant
@@ -347,9 +361,10 @@ graph
   .description("List entities in a dataset")
   .requiredOption("-d, --dataset <datasetId>", "Dataset ID")
   .option("--type <type>", "Filter by entity type")
-  .option("-l, --limit <n>", "Max results", "50")
+  .option("-l, --limit <n>", "Max results", "100")
+  .option("-o, --offset <n>", "Result offset", "0")
   .action((opts) => {
-    const entities = listEntities(opts.dataset, opts.type, parseInt(opts.limit, 10));
+    const entities = listEntities(opts.dataset, opts.type, parseInt(opts.limit, 10), parseInt(opts.offset, 10));
     console.log(JSON.stringify(entities, null, 2));
   });
 
@@ -357,9 +372,10 @@ graph
   .command("relations")
   .description("List relations in a dataset")
   .requiredOption("-d, --dataset <datasetId>", "Dataset ID")
-  .option("-l, --limit <n>", "Max results", "50")
+  .option("-l, --limit <n>", "Max results", "100")
+  .option("-o, --offset <n>", "Result offset", "0")
   .action((opts) => {
-    const relations = listRelations(opts.dataset, parseInt(opts.limit, 10));
+    const relations = listRelations(opts.dataset, parseInt(opts.limit, 10), parseInt(opts.offset, 10));
     console.log(JSON.stringify(relations, null, 2));
   });
 
@@ -388,11 +404,23 @@ graph
   });
 
 graph
+  .command("find-entity")
+  .description("Find an entity by name")
+  .requiredOption("-t, --tenant <tenantId>", "Tenant ID")
+  .argument("<name>", "Entity name")
+  .option("--type <type>", "Entity type filter")
+  .action((name, opts) => {
+    const entity = findEntityByName(opts.tenant, name, opts.type);
+    if (!entity) { console.error(chalk.red("Entity not found")); process.exit(1); }
+    console.log(JSON.stringify(entity, null, 2));
+  });
+
+graph
   .command("delete-entity")
   .description("Delete an entity")
   .argument("<id>", "Entity ID")
-  .action((id) => {
-    const ok = deleteEntity(id);
+  .action(async (id) => {
+    const ok = await deleteEntity(id);
     console.log(ok ? chalk.green("Deleted") : chalk.red("Not found"));
   });
 
@@ -425,8 +453,8 @@ graph
   .command("delete-relation")
   .description("Delete a relation")
   .argument("<id>", "Relation ID")
-  .action((id) => {
-    const ok = deleteRelation(id);
+  .action(async (id) => {
+    const ok = await deleteRelation(id);
     console.log(ok ? chalk.green("Deleted") : chalk.red("Not found"));
   });
 
@@ -434,8 +462,8 @@ graph
   .command("delete-entities-by-dataset")
   .description("Delete all entities in a dataset")
   .requiredOption("-d, --dataset <datasetId>", "Dataset ID")
-  .action((opts) => {
-    const count = deleteEntitiesByDataset(opts.dataset);
+  .action(async (opts) => {
+    const count = await deleteEntitiesByDataset(opts.dataset);
     console.log(chalk.green(`Deleted ${count} entities`));
   });
 
@@ -462,6 +490,40 @@ graph
   .action(async (opts) => {
     const neighbors = await getEntityNeighbors(opts.tenant, opts.entityId, parseInt(opts.depth, 10));
     console.log(JSON.stringify(neighbors, null, 2));
+  });
+
+graph
+  .command("update-entity")
+  .description("Update an entity")
+  .argument("<id>", "Entity ID")
+  .option("--type <type>", "Entity type")
+  .option("--name <name>", "Entity name")
+  .option("--properties <json>", "Entity properties (JSON)")
+  .action((id, opts) => {
+    const updates: Record<string, unknown> = {};
+    if (opts.type) updates.type = opts.type;
+    if (opts.name) updates.name = opts.name;
+    if (opts.properties !== undefined) updates.properties = JSON.parse(opts.properties);
+    const entity = updateEntity(id, updates);
+    if (!entity) { console.error(chalk.red("Entity not found")); process.exit(1); }
+    console.log(JSON.stringify(entity, null, 2));
+  });
+
+graph
+  .command("update-relation")
+  .description("Update a relation")
+  .argument("<id>", "Relation ID")
+  .option("--type <type>", "Relation type")
+  .option("--weight <n>", "Relation weight")
+  .option("--properties <json>", "Relation properties (JSON)")
+  .action((id, opts) => {
+    const updates: Record<string, unknown> = {};
+    if (opts.type) updates.type = opts.type;
+    if (opts.weight !== undefined) updates.weight = parseFloat(opts.weight);
+    if (opts.properties !== undefined) updates.properties = JSON.parse(opts.properties);
+    const relation = updateRelation(id, updates);
+    if (!relation) { console.error(chalk.red("Relation not found")); process.exit(1); }
+    console.log(JSON.stringify(relation, null, 2));
   });
 
 graph

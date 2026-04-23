@@ -116,23 +116,77 @@ export function listRelations(datasetId: string, limit = 100, offset = 0): Relat
   return rows.map(rowToRelation);
 }
 
-export function deleteEntity(id: string): boolean {
+export async function deleteEntity(id: string): Promise<boolean> {
+  const entity = getEntity(id);
+  if (entity) {
+    try {
+      await deleteEntityFromNeo4j(id);
+    } catch {
+      // Neo4j may be unavailable; continue with SQLite only
+    }
+  }
   const db = getDb();
   db.query("DELETE FROM relations WHERE source_entity_id = ? OR target_entity_id = ?").run(id, id);
   const result = db.query("DELETE FROM entities WHERE id = ?").run(id);
   return result.changes > 0;
 }
 
-export function deleteRelation(id: string): boolean {
+export async function deleteRelation(id: string): Promise<boolean> {
+  const relation = getRelation(id);
+  if (relation) {
+    try {
+      await deleteRelationFromNeo4j(id);
+    } catch {
+      // Neo4j may be unavailable; continue with SQLite only
+    }
+  }
   const db = getDb();
   const result = db.query("DELETE FROM relations WHERE id = ?").run(id);
   return result.changes > 0;
 }
 
-export function deleteEntitiesByDataset(datasetId: string): number {
+export function updateEntity(id: string, updates: Partial<Entity>): Entity | null {
+  const existing = getEntity(id);
+  if (!existing) return null;
+  const db = getDb();
+  const fields: string[] = [];
+  const values: any[] = [];
+  if (updates.type !== undefined) { fields.push("type = ?"); values.push(updates.type); }
+  if (updates.name !== undefined) { fields.push("name = ?"); values.push(updates.name); }
+  if (updates.properties !== undefined) { fields.push("properties = ?"); values.push(JSON.stringify(updates.properties)); }
+  if (fields.length === 0) return existing;
+  values.push(id);
+  db.query(`UPDATE entities SET ${fields.join(", ")}, updated_at = datetime('now') WHERE id = ?`).run(...values);
+  return getEntity(id)!;
+}
+
+export function updateRelation(id: string, updates: Partial<Relation>): Relation | null {
+  const existing = getRelation(id);
+  if (!existing) return null;
+  const db = getDb();
+  const fields: string[] = [];
+  const values: any[] = [];
+  if (updates.type !== undefined) { fields.push("type = ?"); values.push(updates.type); }
+  if (updates.weight !== undefined) { fields.push("weight = ?"); values.push(updates.weight); }
+  if (updates.properties !== undefined) { fields.push("properties = ?"); values.push(JSON.stringify(updates.properties)); }
+  if (fields.length === 0) return existing;
+  values.push(id);
+  db.query(`UPDATE relations SET ${fields.join(", ")}, created_at = datetime('now') WHERE id = ?`).run(...values);
+  return getRelation(id)!;
+}
+
+export async function deleteEntitiesByDataset(datasetId: string): Promise<number> {
   const db = getDb();
   const entityIds = db.query("SELECT id FROM entities WHERE dataset_id = ?").all(datasetId) as any[];
   if (entityIds.length > 0) {
+    // Delete from Neo4j first
+    for (const entity of entityIds) {
+      try {
+        await deleteEntityFromNeo4j(entity.id);
+      } catch {
+        // Neo4j may be unavailable; continue with SQLite only
+      }
+    }
     const placeholders = entityIds.map(() => "?").join(",");
     db.query(`DELETE FROM relations WHERE source_entity_id IN (${placeholders}) OR target_entity_id IN (${placeholders})`)
       .run(...entityIds.map((r: any) => r.id), ...entityIds.map((r: any) => r.id));

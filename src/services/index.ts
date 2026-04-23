@@ -14,7 +14,7 @@ export { structureData, sanitizeData } from "./structure.js";
 export { vectorizeTexts, vectorizeSingle, cosineSimilarity, textToSearchable } from "./vectorize.js";
 
 // Graph
-export { createEntity, getEntity, listEntities, findEntityByName, createRelation, getRelation, listRelations, deleteRelation, deleteEntity, deleteEntitiesByDataset, upsertEntityInNeo4j, createRelationInNeo4j, deleteEntityFromNeo4j, deleteRelationFromNeo4j, findGraphPaths, getEntityNeighbors, extractGraphEntities } from "./graph.js";
+export { createEntity, getEntity, listEntities, findEntityByName, createRelation, getRelation, listRelations, deleteRelation, updateEntity, updateRelation, deleteEntity, deleteEntitiesByDataset, upsertEntityInNeo4j, createRelationInNeo4j, deleteEntityFromNeo4j, deleteRelationFromNeo4j, findGraphPaths, getEntityNeighbors, extractGraphEntities } from "./graph.js";
 
 // Search
 export { vectorSearch, graphSearch, hybridSearch, search } from "./search.js";

@@ -12,7 +12,10 @@ import {
   listRelations,
   deleteEntity,
   deleteEntitiesByDataset,
+  updateEntity,
+  updateRelation,
 } from "../src/services/graph.js";
+import { OpenData } from "../src/sdk/index.js";
 
 const DB_PATH = `/tmp/open-data-test-graph-${Date.now()}.db`;
 let tenantId: string;
@@ -95,6 +98,41 @@ describe("entity CRUD", () => {
   });
 });
 
+describe("entity update", () => {
+  test("updateEntity updates type", () => {
+    const ent = createEntity(tenantId, datasetId, "person", "UpdateTypeTest");
+    const updated = updateEntity(ent.id, { type: "developer" });
+    expect(updated).not.toBeNull();
+    expect(updated!.type).toBe("developer");
+    expect(updated!.name).toBe("UpdateTypeTest");
+  });
+
+  test("updateEntity updates name", () => {
+    const ent = createEntity(tenantId, datasetId, "person", "OldName");
+    const updated = updateEntity(ent.id, { name: "NewName" });
+    expect(updated).not.toBeNull();
+    expect(updated!.name).toBe("NewName");
+  });
+
+  test("updateEntity updates properties", () => {
+    const ent = createEntity(tenantId, datasetId, "concept", "PropsTest");
+    const updated = updateEntity(ent.id, { properties: { level: 5, active: true } });
+    expect(updated).not.toBeNull();
+    expect(updated!.properties).toEqual({ level: 5, active: true });
+  });
+
+  test("updateEntity returns null for unknown id", () => {
+    expect(updateEntity("ent_unknown", { type: "x" })).toBeNull();
+  });
+
+  test("updateEntity returns existing entity when no fields provided", () => {
+    const ent = createEntity(tenantId, datasetId, "person", "NoUpdateTest");
+    const updated = updateEntity(ent.id, {});
+    expect(updated).not.toBeNull();
+    expect(updated!.id).toBe(ent.id);
+  });
+});
+
 describe("relation CRUD", () => {
   test("createRelation links two entities", () => {
     const source = createEntity(tenantId, datasetId, "person", "RelSrc");
@@ -130,8 +168,41 @@ describe("relation CRUD", () => {
   });
 });
 
+describe("relation update", () => {
+  test("updateRelation updates type", () => {
+    const s = createEntity(tenantId, datasetId, "person", "RelUpdTypeSrc");
+    const t = createEntity(tenantId, datasetId, "concept", "RelUpdTypeTgt");
+    const rel = createRelation(tenantId, "old_type", s.id, t.id);
+    const updated = updateRelation(rel.id, { type: "new_type" });
+    expect(updated).not.toBeNull();
+    expect(updated!.type).toBe("new_type");
+  });
+
+  test("updateRelation updates weight", () => {
+    const s = createEntity(tenantId, datasetId, "person", "RelUpdWeightSrc");
+    const t = createEntity(tenantId, datasetId, "concept", "RelUpdWeightTgt");
+    const rel = createRelation(tenantId, "weighted", s.id, t.id, 0.5);
+    const updated = updateRelation(rel.id, { weight: 0.9 });
+    expect(updated).not.toBeNull();
+    expect(updated!.weight).toBe(0.9);
+  });
+
+  test("updateRelation updates properties", () => {
+    const s = createEntity(tenantId, datasetId, "person", "RelUpdPropSrc");
+    const t = createEntity(tenantId, datasetId, "concept", "RelUpdPropTgt");
+    const rel = createRelation(tenantId, "prop_rel", s.id, t.id);
+    const updated = updateRelation(rel.id, { properties: { reason: "test" } });
+    expect(updated).not.toBeNull();
+    expect(updated!.properties).toEqual({ reason: "test" });
+  });
+
+  test("updateRelation returns null for unknown id", () => {
+    expect(updateRelation("rel_unknown", { type: "x" })).toBeNull();
+  });
+});
+
 describe("entity deletion", () => {
-  test("deleteEntity cascades to relations", () => {
+  test("deleteEntity cascades to relations", async () => {
     const s = createEntity(tenantId, datasetId, "person", "CascadeSrc");
     const t = createEntity(tenantId, datasetId, "concept", "CascadeTgt");
     const rel = createRelation(tenantId, "authored", s.id, t.id);
@@ -140,7 +211,7 @@ describe("entity deletion", () => {
     expect(getRelation(rel.id)).not.toBeNull();
 
     // Delete source entity
-    expect(deleteEntity(s.id)).toBe(true);
+    expect(await deleteEntity(s.id)).toBe(true);
     expect(getEntity(s.id)).toBeNull();
 
     // Relation should be gone too
@@ -149,18 +220,95 @@ describe("entity deletion", () => {
     expect(getEntity(t.id)).not.toBeNull();
   });
 
-  test("deleteEntity returns false for unknown id", () => {
-    expect(deleteEntity("ent_nonexistent")).toBe(false);
+  test("deleteEntity returns false for unknown id", async () => {
+    expect(await deleteEntity("ent_nonexistent")).toBe(false);
   });
 
-  test("deleteEntitiesByDataset removes all entities and relations", () => {
+  test("deleteEntitiesByDataset removes all entities and relations", async () => {
     const ds2 = createDataset({ tenant_id: tenantId, name: "Del Graph DS" });
     const s = createEntity(tenantId, ds2.id, "person", "DelSrc");
     const t = createEntity(tenantId, ds2.id, "concept", "DelTgt");
     createRelation(tenantId, "related_to", s.id, t.id);
 
-    const deleted = deleteEntitiesByDataset(ds2.id);
+    const deleted = await deleteEntitiesByDataset(ds2.id);
     expect(deleted).toBe(2);
     expect(listEntities(ds2.id).length).toBe(0);
+  });
+});
+
+describe("listEntities offset", () => {
+  test("listEntities with offset skips first N results", () => {
+    const ds3 = createDataset({ tenant_id: tenantId, name: "Offset DS" });
+    createEntity(tenantId, ds3.id, "person", "Offset1");
+    createEntity(tenantId, ds3.id, "person", "Offset2");
+    createEntity(tenantId, ds3.id, "person", "Offset3");
+    createEntity(tenantId, ds3.id, "person", "Offset4");
+
+    const all = listEntities(ds3.id, "person");
+    expect(all.length).toBe(4);
+
+    const page1 = listEntities(ds3.id, "person", 2, 0);
+    const page2 = listEntities(ds3.id, "person", 2, 2);
+
+    expect(page1.length).toBe(2);
+    expect(page2.length).toBe(2);
+    // Pages should have different entities
+    expect(page1[0].name).not.toBe(page2[0].name);
+  });
+
+  test("listEntities with offset beyond results returns empty", () => {
+    const ds4 = createDataset({ tenant_id: tenantId, name: "Offset Empty DS" });
+    createEntity(tenantId, ds4.id, "person", "OnlyOne");
+    const result = listEntities(ds4.id, "person", 10, 5);
+    expect(result.length).toBe(0);
+  });
+});
+
+describe("listRelations offset", () => {
+  test("listRelations with offset skips first N results", () => {
+    const ds5 = createDataset({ tenant_id: tenantId, name: "RelOffset DS" });
+    const s = createEntity(tenantId, ds5.id, "person", "RelOffSrc");
+    const t1 = createEntity(tenantId, ds5.id, "concept", "RelOffTgt1");
+    const t2 = createEntity(tenantId, ds5.id, "concept", "RelOffTgt2");
+    const t3 = createEntity(tenantId, ds5.id, "concept", "RelOffTgt3");
+    createRelation(tenantId, "rel1", s.id, t1.id);
+    createRelation(tenantId, "rel2", s.id, t2.id);
+    createRelation(tenantId, "rel3", s.id, t3.id);
+
+    const all = listRelations(ds5.id);
+    expect(all.length).toBeGreaterThanOrEqual(3);
+
+    const page1 = listRelations(ds5.id, 2, 0);
+    const page2 = listRelations(ds5.id, 2, 2);
+
+    expect(page1.length).toBe(2);
+    // If there are enough relations, page2 should have at least 1
+    if (all.length >= 3) {
+      expect(page2.length).toBeGreaterThanOrEqual(1);
+      expect(page1[0].type).not.toBe(page2[0].type);
+    }
+  });
+});
+
+describe("SDK findEntityByName", () => {
+  test("graph.findByEntityName finds entity by name", () => {
+    const client = new OpenData();
+    const found = client.graph.findByEntityName(tenantId, "Alice");
+    expect(found).not.toBeNull();
+    expect(found!.name).toBe("Alice");
+    expect(found!.type).toBe("person");
+    client.close();
+  });
+
+  test("graph.findByEntityName with type filter", () => {
+    const client = new OpenData();
+    // "TypedFind" exists as both "person" and "concept"
+    const person = client.graph.findByEntityName(tenantId, "TypedFind", "person");
+    expect(person).not.toBeNull();
+    expect(person!.type).toBe("person");
+    const concept = client.graph.findByEntityName(tenantId, "TypedFind", "concept");
+    expect(concept).not.toBeNull();
+    expect(concept!.type).toBe("concept");
+    client.close();
   });
 });

@@ -7,7 +7,7 @@ Structured data indexing with local knowledge graphs. A CLI, MCP server, REST AP
 ```
 @hasna/data
 ├── CLI (data)       — 44 commands via commander + ink TUI
-├── MCP Server       — 39 tools for AI agent integration
+├── MCP Server       — 40 tools for AI agent integration
 ├── REST API         — 40+ routes via Bun.serve
 ├── SDK              — TypeScript library with full API coverage
 └── Library exports  — Import services, types, and utilities directly

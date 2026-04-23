@@ -15,8 +15,8 @@ export function getConfig(): DataConfig {
     neo4j_password: process.env.NEO4J_PASSWORD || "",
     openai_api_key: process.env.OPENAI_API_KEY || "",
     openai_base_url: process.env.OPENAI_BASE_URL || "",
-    port: parseInt(process.env.DATA_PORT || "4321", 10),
-    log_level: (process.env.DATA_LOG_LEVEL as DataConfig["log_level"]) || "info",
+    port: parseInt(process.env.PORT || "4100", 10),
+    log_level: (process.env.LOG_LEVEL as DataConfig["log_level"]) || "info",
   };
 }
 
