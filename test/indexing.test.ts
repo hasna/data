@@ -694,10 +694,15 @@ describe("ingestData — dataset with schema", () => {
       auto_process: false,
     });
 
-    deleteDataset(ds.id);
+    // Bypass cascade: disable FK checks, delete the dataset row so the record survives
+    const { getDb } = await import("../src/db/sqlite.js");
+    const db = getDb();
+    db.query("PRAGMA foreign_keys = OFF").run();
+    db.query("DELETE FROM datasets WHERE id = ?").run(ds.id);
+    db.query("PRAGMA foreign_keys = ON").run();
 
     const procResult = await processPendingRecord(tempResult.record_id);
     expect(procResult.status).toBe("error");
-    expect(procResult.message).toContain("not found");
+    expect(procResult.message).toContain("Dataset not found");
   });
 });

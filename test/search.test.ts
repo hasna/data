@@ -4,7 +4,7 @@ import { createTenant } from "../src/services/tenant.js";
 import { createDataset } from "../src/services/dataset.js";
 import { createEntity, createRelation, deleteRelation } from "../src/services/graph.js";
 import { createRecord, updateRecordStatus, updateRecordVector } from "../src/services/record.js";
-import { graphSearch, vectorSearch, hybridSearch, search } from "../src/services/search.js";
+import { graphSearch, vectorSearch, hybridSearch, search, mergeSearchResults } from "../src/services/search.js";
 
 import * as vectorizeMod from "../src/services/vectorize.js";
 
@@ -413,5 +413,62 @@ describe("deleteRelation", () => {
   test("returns false for nonexistent relation", async () => {
     const deleted = await deleteRelation("rel_nonexistent");
     expect(deleted).toBe(false);
+  });
+});
+
+// --- mergeSearchResults tests ---
+
+describe("mergeSearchResults", () => {
+  const fakeRecord = (id: string, score: number) => ({
+    record: { id, dataset_id: "ds", tenant_id: "t", data: {}, status: "complete" as const },
+    score,
+  });
+
+  test("merges unique records from both sources", () => {
+    const v = { records: [fakeRecord("a", 0.8)], total: 1, latency_ms: 1 };
+    const g = { records: [fakeRecord("b", 0.6)], total: 1, latency_ms: 1 };
+    const result = mergeSearchResults(v, g, 10);
+    expect(result.length).toBe(2);
+  });
+
+  test("deduplicates vector records with score boosting", () => {
+    const v = { records: [fakeRecord("a", 0.5), fakeRecord("a", 0.9)], total: 2, latency_ms: 1 };
+    const g = { records: [], total: 0, latency_ms: 1 };
+    const result = mergeSearchResults(v, g, 10);
+    expect(result.length).toBe(1);
+    expect(result[0].score).toBe(0.9);
+  });
+
+  test("deduplicates graph records with score boosting", () => {
+    const v = { records: [fakeRecord("a", 0.5)], total: 1, latency_ms: 1 };
+    const g = { records: [fakeRecord("a", 0.6)], total: 1, latency_ms: 1 };
+    const result = mergeSearchResults(v, g, 10);
+    expect(result.length).toBe(1);
+    // graph gets 0.1 boost: max(0.5, 0.6 + 0.1) = 0.7
+    expect(result[0].score).toBe(0.7);
+  });
+
+  test("applies limit after merging", () => {
+    const v = { records: [fakeRecord("a", 0.9), fakeRecord("b", 0.7), fakeRecord("c", 0.5)], total: 3, latency_ms: 1 };
+    const g = { records: [fakeRecord("d", 0.3)], total: 1, latency_ms: 1 };
+    const result = mergeSearchResults(v, g, 2);
+    expect(result.length).toBe(2);
+    expect(result[0].record.id).toBe("a");
+    expect(result[1].record.id).toBe("b");
+  });
+
+  test("sorts by score descending", () => {
+    const v = { records: [fakeRecord("a", 0.3)], total: 1, latency_ms: 1 };
+    const g = { records: [fakeRecord("b", 0.8)], total: 1, latency_ms: 1 };
+    const result = mergeSearchResults(v, g, 10);
+    expect(result[0].record.id).toBe("b");
+    expect(result[1].record.id).toBe("a");
+  });
+
+  test("handles empty inputs", () => {
+    const v = { records: [], total: 0, latency_ms: 1 };
+    const g = { records: [], total: 0, latency_ms: 1 };
+    const result = mergeSearchResults(v, g, 10);
+    expect(result).toEqual([]);
   });
 });

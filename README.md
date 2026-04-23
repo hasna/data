@@ -253,7 +253,7 @@ pending → structured → sanitized → vectorized → graphed → complete
 bun install          # Install dependencies
 bun run build        # Build all binaries
 bun run typecheck    # Type check
-bun run test         # Run tests (335 tests across 14 files)
+bun run test         # Run tests (349 tests across 15 files)
 bun run dev:cli      # Run CLI in development mode
 bun run dev:mcp      # Run MCP server in development mode
 bun run dev:serve    # Run REST API in development mode

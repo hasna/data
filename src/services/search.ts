@@ -188,16 +188,7 @@ export async function graphSearch(request: SearchRequest): Promise<SearchResult>
 
 // --- Hybrid Search ---
 
-export async function hybridSearch(request: SearchRequest): Promise<SearchResult> {
-  const start = Date.now();
-  const limit = request.limit || 10;
-
-  const [vectorResult, graphResult] = await Promise.all([
-    vectorSearch(request),
-    graphSearch(request),
-  ]);
-
-  // Merge and deduplicate records
+export function mergeSearchResults(vectorResult: SearchResult, graphResult: SearchResult, limit: number): SearchResultRecord[] {
   const recordMap = new Map<string, SearchResultRecord>();
 
   for (const sr of vectorResult.records) {
@@ -218,9 +209,21 @@ export async function hybridSearch(request: SearchRequest): Promise<SearchResult
     }
   }
 
-  const merged = Array.from(recordMap.values())
+  return Array.from(recordMap.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
+}
+
+export async function hybridSearch(request: SearchRequest): Promise<SearchResult> {
+  const start = Date.now();
+  const limit = request.limit || 10;
+
+  const [vectorResult, graphResult] = await Promise.all([
+    vectorSearch(request),
+    graphSearch(request),
+  ]);
+
+  const merged = mergeSearchResults(vectorResult, graphResult, limit);
 
   // Merge graph paths
   const graphPaths = [...(graphResult.graph_paths || [])];
